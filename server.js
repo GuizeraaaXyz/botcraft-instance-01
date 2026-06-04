@@ -23,7 +23,7 @@ let bots = [];
 let nextBotId = 1;
 
 let globalConfig = {
-    maxReconnectAttempts: 10,
+    maxReconnectAttempts: 15,
     webServerPort: process.env.PORT || 3000
 };
 
@@ -166,6 +166,12 @@ class CommandScheduler {
             
             const cmd = this.botData.commands[i];
             if (cmd && cmd.trim()) {
+                // Se for o comando /ac, dá um delay antes de executar
+                if (cmd === "/ac" || cmd.includes("/ac")) {
+                    console.log(`[${this.botData.nome}] ⏳ Aguardando 2s antes do /ac...`);
+                    await this.delay(2000);
+                }
+                
                 await this.executeCommand(cmd);
                 
                 // Delay entre comandos
