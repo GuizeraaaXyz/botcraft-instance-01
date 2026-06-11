@@ -309,22 +309,14 @@ body{font-family:var(--font-mono);background:var(--bg);color:var(--text);min-hei
       <button class="modal-close" onclick="closeModal('commandsModal')"><i class="fas fa-times"></i></button>
     </div>
     <div class="modal-body">
+      <!-- INPUT PARA ENVIO RÁPIDO DE MENSAGENS -->
       <div style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:12px;margin-bottom:14px">
-        <div style="font-size:9px;color:var(--green);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-bolt"></i> Comandos Rápidos</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
-          <button class="btn btn-sm quick-cmd" data-cmd="/tpa ">/tpa</button>
-          <button class="btn btn-sm quick-cmd" data-cmd="/tpaccept">/tpaccept</button>
-          <button class="btn btn-sm quick-cmd" data-cmd="/tpdeny">/tpdeny</button>
-          <button class="btn btn-sm quick-cmd" data-cmd="/sethome">/sethome</button>
-          <button class="btn btn-sm quick-cmd" data-cmd="/home">/home</button>
-          <button class="btn btn-sm quick-cmd" data-cmd="/bal">/bal</button>
-          <button class="btn btn-sm quick-cmd" data-cmd="/msg ">/msg</button>
-          <button class="btn btn-sm quick-cmd" data-cmd="Oi pessoal!">Oi pessoal!</button>
-        </div>
+        <div style="font-size:9px;color:var(--green);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-comment"></i> Enviar mensagem para o chat</div>
         <div style="display:flex;gap:8px">
-          <input type="text" id="quickCmdTarget" placeholder="Nome do jogador (se necessário)" style="flex:1;background:var(--bg4);border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:var(--font-mono);font-size:11px;padding:7px 10px">
-          <button class="btn btn-primary btn-sm" onclick="sendQuickCommand()">Enviar</button>
+          <input type="text" id="quickMessageInput" placeholder="Digite sua mensagem ou comando... (/msg Player, /home, /bal, etc.)" style="flex:1;background:var(--bg4);border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:var(--font-mono);font-size:12px;padding:9px 12px;outline:none;" onkeypress="if(event.key==='Enter') sendQuickMessage()">
+          <button class="btn btn-primary" onclick="sendQuickMessage()"><i class="fas fa-paper-plane"></i> Enviar</button>
         </div>
+        <div style="font-size:9px;color:var(--text3);margin-top:6px"><i class="fas fa-info-circle"></i> Pressione Enter para enviar diretamente</div>
       </div>
 
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
@@ -543,6 +535,9 @@ async function openCmdsModal(botId, botName) {
   
   document.getElementById('cmdModalName').textContent = botName;
   
+  // Limpa o input de mensagem rápida
+  document.getElementById('quickMessageInput').value = '';
+  
   try {
     const r = await fetch(`${API}/bot/${botId}`);
     if (r.ok) {
@@ -624,41 +619,40 @@ async function testCommands() {
   addCmdLog('Teste concluído!', 'ok');
 }
 
-function sendQuickCommand() {
-  const target = document.getElementById('quickCmdTarget').value;
-  let cmd = currentQuickCmd || '';
+// NOVA FUNÇÃO: Envia mensagem rápida do input
+function sendQuickMessage() {
+  const input = document.getElementById('quickMessageInput');
+  const message = input.value.trim();
   
-  if (target && !cmd.includes('/msg') && !cmd.includes('/tpa') && !cmd.includes('/pay')) {
-    cmd = cmd + ' ' + target;
-  }
-  
-  if (cmd.includes('/msg') && target) {
-    const msg = prompt('Digite a mensagem:');
-    if (msg) cmd = `/msg ${target} ${msg}`;
-  }
-  
-  if (!cmd) {
-    addCmdLog('Selecione um comando rápido primeiro!', 'warn');
+  if (!message) {
+    addCmdLog('Digite uma mensagem ou comando primeiro!', 'warn');
     return;
   }
   
-  addCmdLog(`Enviando: ${cmd}`, 'info');
+  if (!currentBotId) {
+    addCmdLog('Nenhum bot selecionado!', 'err');
+    return;
+  }
+  
+  addCmdLog(`📤 Enviando: "${message}"`, 'info');
+  
   fetch(`${API}/bot/${currentBotId}/say`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: cmd })
-  }).catch(e => addCmdLog(`Erro: ${e.message}`, 'err'));
+    body: JSON.stringify({ message: message })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      addCmdLog(`✅ Mensagem enviada com sucesso!`, 'ok');
+      input.value = ''; // Limpa o input após enviar
+      input.focus();
+    } else {
+      addCmdLog(`❌ Erro ao enviar: ${data.error || 'desconhecido'}`, 'err');
+    }
+  })
+  .catch(e => addCmdLog(`❌ Erro: ${e.message}`, 'err'));
 }
-
-let currentQuickCmd = '';
-document.querySelectorAll('.quick-cmd').forEach(btn => {
-  btn.onclick = () => {
-    currentQuickCmd = btn.dataset.cmd;
-    document.querySelectorAll('.quick-cmd').forEach(b => b.style.borderColor = '');
-    btn.style.borderColor = 'var(--green)';
-    addCmdLog(`Comando selecionado: ${currentQuickCmd}`, 'info');
-  };
-});
 
 async function loadConfig() {
   try {
