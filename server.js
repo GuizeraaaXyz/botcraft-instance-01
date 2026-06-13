@@ -39,7 +39,7 @@ const PRECONFIGURED_BOTS = [
         senha: "250719802023",
         autoSequence: true,
         commands: [
-            "/login {senha}",
+            "/login 250719802023",
             "/skyblock",
             "/ac"
         ]
@@ -52,7 +52,7 @@ const PRECONFIGURED_BOTS = [
         senha: "250719802023",
         autoSequence: true,
         commands: [
-            "/login {senha}",
+            "/login 250719802023",
             "/skyblock",
             "/ac"
         ]
@@ -65,7 +65,7 @@ const PRECONFIGURED_BOTS = [
         senha: "250719802023",
         autoSequence: true,
         commands: [
-            "/login {senha}",
+            "/login 250719802023",
             "/skyblock",
             "/ac"
         ]
