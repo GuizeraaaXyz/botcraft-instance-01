@@ -32,7 +32,7 @@ let globalConfig = {
 
 const PRECONFIGURED_BOTS = [
     {
-        nome: "cachorrodomato_",
+        nome: "cachorrodomato_2",
         server: "healtzcraft.com",
         port: 25565,
         version: "1.21.4",
