@@ -3,6 +3,16 @@ import http from 'http';
 import { Server } from 'socket.io';
 import mineflayer from 'mineflayer';
 
+// Filtro global — silencia spam de PartialReadError de partículas
+const _stderrWrite = process.stderr.write.bind(process.stderr);
+process.stderr.write = (data, ...args) => {
+    if (typeof data === 'string' && (
+        data.includes('packet_world_particles') ||
+        data.includes('PartialReadError')
+    )) return true;
+    return _stderrWrite(data, ...args);
+};
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -152,7 +162,22 @@ class CommandScheduler {
 
         this.isRunning = true;
 
-        console.log(`[${this.botData.nome}] 🚀 Iniciando sequência de comandos...`);
+        // Aguarda resource pack antes de qualquer comando (max 20s)
+        console.log(`[${this.botData.nome}] ⏳ Aguardando resource pack...`);
+        let waitTime = 0;
+        while (!this.botData.resourcePackReady && waitTime < 20000) {
+            await this.delay(500);
+            waitTime += 500;
+        }
+
+        if (this.botData.resourcePackReady) {
+            console.log(`[${this.botData.nome}] ✅ Resource pack pronto!`);
+            await this.delay(3000);
+        } else {
+            console.log(`[${this.botData.nome}] ⚠️ Sem resource pack, continuando mesmo assim...`);
+        }
+
+        console.log(`[${this.botData.nome}] 🚀 Executando comandos...`);
 
         for (let i = 0; i < this.botData.commands.length; i++) {
             if (!this.isRunning || this.botData.status !== 'online') break;
@@ -160,37 +185,23 @@ class CommandScheduler {
             const cmd = this.botData.commands[i];
             if (!cmd?.trim()) continue;
 
-            // Antes do /ac, aguarda o resource pack (que aparece após /skyblock)
             if (cmd.includes('/ac')) {
-                console.log(`[${this.botData.nome}] ⏳ Aguardando resource pack antes do /ac...`);
-                let waited = 0;
-                while (!this.botData.resourcePackReady && waited < 20000) {
-                    await this.delay(500);
-                    waited += 500;
-                }
-                if (this.botData.resourcePackReady) {
-                    console.log(`[${this.botData.nome}] ✅ Resource pack pronto! Executando /ac...`);
-                    await this.delay(1000);
-                } else {
-                    console.log(`[${this.botData.nome}] ⚠️ Timeout resource pack, executando /ac mesmo assim...`);
-                }
+                console.log(`[${this.botData.nome}] ⏳ Aguardando 2s antes do /ac...`);
+                await this.delay(2000);
             }
 
             await this.executeCommand(cmd);
 
-            // Delays após cada comando
             if (i === 0) {
-                // Após /login
                 console.log(`[${this.botData.nome}] ⏳ Aguardando 5s...`);
                 await this.delay(5000);
             } else if (i === 1) {
-                // Após /skyblock — dá tempo pro resource pack chegar
-                console.log(`[${this.botData.nome}] ⏳ Aguardando 2s após /skyblock...`);
-                await this.delay(2000);
+                console.log(`[${this.botData.nome}] ⏳ Aguardando 8s...`);
+                await this.delay(8000);
             }
         }
 
-        console.log(`[${this.botData.nome}] ✅ Sequência concluída! Bot em standby.`);
+        console.log(`[${this.botData.nome}] ✅ Comandos finalizados! Bot em standby.`);
         this.isRunning = false;
     }
     
