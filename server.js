@@ -3,16 +3,6 @@ import http from 'http';
 import { Server } from 'socket.io';
 import mineflayer from 'mineflayer';
 
-// Filtro global — silencia spam de PartialReadError de partículas
-const _stderrWrite = process.stderr.write.bind(process.stderr);
-process.stderr.write = (data, ...args) => {
-    if (typeof data === 'string' && (
-        data.includes('packet_world_particles') ||
-        data.includes('PartialReadError')
-    )) return true;
-    return _stderrWrite(data, ...args);
-};
-
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -42,7 +32,7 @@ let globalConfig = {
 
 const PRECONFIGURED_BOTS = [
     {
-        nome: "cachorrodomato_2",
+        nome: "cachorrodomato_",
         server: "healtzcraft.com",
         port: 25565,
         version: "1.21.4",
@@ -161,46 +151,46 @@ class CommandScheduler {
         }
 
         this.isRunning = true;
-
-        // Aguarda resource pack antes de qualquer comando (max 20s)
+        
         console.log(`[${this.botData.nome}] ⏳ Aguardando resource pack...`);
+        
         let waitTime = 0;
         while (!this.botData.resourcePackReady && waitTime < 20000) {
             await this.delay(500);
             waitTime += 500;
         }
-
+        
         if (this.botData.resourcePackReady) {
             console.log(`[${this.botData.nome}] ✅ Resource pack pronto!`);
             await this.delay(3000);
         } else {
-            console.log(`[${this.botData.nome}] ⚠️ Sem resource pack, continuando mesmo assim...`);
+            console.log(`[${this.botData.nome}] ⚠️ Sem resource pack, continuando...`);
         }
-
+        
         console.log(`[${this.botData.nome}] 🚀 Executando comandos...`);
-
+        
         for (let i = 0; i < this.botData.commands.length; i++) {
             if (!this.isRunning || this.botData.status !== 'online') break;
-
+            
             const cmd = this.botData.commands[i];
-            if (!cmd?.trim()) continue;
-
-            if (cmd.includes('/ac')) {
-                console.log(`[${this.botData.nome}] ⏳ Aguardando 2s antes do /ac...`);
-                await this.delay(2000);
-            }
-
-            await this.executeCommand(cmd);
-
-            if (i === 0) {
-                console.log(`[${this.botData.nome}] ⏳ Aguardando 5s...`);
-                await this.delay(5000);
-            } else if (i === 1) {
-                console.log(`[${this.botData.nome}] ⏳ Aguardando 8s...`);
-                await this.delay(8000);
+            if (cmd && cmd.trim()) {
+                if (cmd === "/ac" || cmd.includes("/ac")) {
+                    console.log(`[${this.botData.nome}] ⏳ Aguardando 2s antes do /ac...`);
+                    await this.delay(2000);
+                }
+                
+                await this.executeCommand(cmd);
+                
+                if (i === 0) {
+                    console.log(`[${this.botData.nome}] ⏳ Aguardando 5s...`);
+                    await this.delay(5000);
+                } else if (i === 1) {
+                    console.log(`[${this.botData.nome}] ⏳ Aguardando 8s...`);
+                    await this.delay(8000);
+                }
             }
         }
-
+        
         console.log(`[${this.botData.nome}] ✅ Comandos finalizados! Bot em standby.`);
         this.isRunning = false;
     }
@@ -235,16 +225,14 @@ function destroyBot(botId) {
     }
     
     if (botData.bot) {
-        try {
-            botData.bot.removeAllListeners();
-            botData.bot.quit();
-        } catch(e) {}
+        try { botData.bot.quit(); } catch(e) {}
         botData.bot = null;
     }
     
     botData.status = 'offline';
     botData.connecting = false;
     botData.resourcePackReady = false;
+    // Não toca em bot.running — quem controla isso é start/stop da API
     
     bots[index] = botData;
     io.emit('botStatus', { id: botId, status: 'offline', nome: botData.nome });
@@ -277,7 +265,7 @@ function createBot(botId) {
     if (index === -1) return;
     
     const botData = bots[index];
-    if (botData.status === 'online') return;
+    if (botData.connecting || botData.status === 'online') return;
     
     destroyBot(botId);
     
@@ -307,40 +295,65 @@ function createBot(botId) {
     
     const bot = mineflayer.createBot(options);
     botData.bot = bot;
-
-    // Resource pack — pode chegar a qualquer momento (incluindo após /skyblock)
-    bot.on('resourcePack', () => {
+    
+    bot.on('resourcePack', (pack) => {
         console.log(`[${botData.nome}] 📦 Resource pack detectado! Aceitando...`);
-        try { bot.acceptResourcePack(); } catch(e) {}
+        bot.acceptResourcePack();
         botData.resourcePackReady = true;
         bots[index] = botData;
     });
     
     bot.once('spawn', () => {
-        console.log(`[${botData.nome}] ✅ Conectado!`);
+        console.log(`[${botData.nome}] ✅ Conectado! Aguardando resource pack...`);
         
         botData.connecting = false;
         botData.status = 'online';
-        botData.reconnectAttempts = 0;
+        botData.reconnectAttempts = 0; // Reset ao conectar com sucesso
         bots[index] = botData;
         
         io.emit('botStatus', { id: botId, status: 'online', nome: botData.nome });
-
-        // Inicia comandos direto — o /ac vai esperar o resource pack internamente
-        setTimeout(() => {
-            if (botData.status === 'online') {
-                botData.commandScheduler = new CommandScheduler(bot, botData);
-                botData.commandScheduler.start();
-                bots[index] = botData;
-            }
-        }, 2000);
+        
+        if (botData.resourcePackReady) {
+            console.log(`[${botData.nome}] ✅ Resource pack pronto, iniciando comandos em 3s...`);
+            setTimeout(() => {
+                if (botData.status === 'online') {
+                    botData.commandScheduler = new CommandScheduler(bot, botData);
+                    botData.commandScheduler.start();
+                    bots[index] = botData;
+                }
+            }, 3000);
+        } else {
+            console.log(`[${botData.nome}] ⏳ Aguardando resource pack (max 15s)...`);
+            let checkInterval = setInterval(() => {
+                if (botData.resourcePackReady) {
+                    clearInterval(checkInterval);
+                    console.log(`[${botData.nome}] ✅ Resource pack recebido!`);
+                    setTimeout(() => {
+                        if (botData.status === 'online') {
+                            botData.commandScheduler = new CommandScheduler(bot, botData);
+                            botData.commandScheduler.start();
+                            bots[index] = botData;
+                        }
+                    }, 3000);
+                }
+            }, 1000);
+            
+            setTimeout(() => {
+                clearInterval(checkInterval);
+                if (!botData.resourcePackReady && botData.status === 'online') {
+                    console.log(`[${botData.nome}] ⚠️ Timeout resource pack, iniciando mesmo assim...`);
+                    botData.commandScheduler = new CommandScheduler(bot, botData);
+                    botData.commandScheduler.start();
+                    bots[index] = botData;
+                }
+            }, 15000);
+        }
     });
     
     bot.on('error', (err) => {
-        // EPIPE = servidor fechou conexão, não é erro crítico
-        if (err.code === 'EPIPE' || err.message?.includes('EPIPE')) return;
-        if (err.message?.includes('ETIMEDOUT')) return;
-        console.log(`[${botData.nome}] ⚠️ ${err.message}`);
+        if (!err.message.includes('ETIMEDOUT')) {
+            console.log(`[${botData.nome}] ⚠️ ${err.message}`);
+        }
     });
     
     bot.on('end', () => {
