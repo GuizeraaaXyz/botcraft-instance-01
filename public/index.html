@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BotCraft Manager</title>
+<title>BotCraft Manager | Sistema Completo</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <script src="/socket.io/socket.io.js"></script>
@@ -116,6 +116,8 @@ body{font-family:var(--font-mono);background:var(--bg);color:var(--text);min-hei
 .log-line .msg-err{color:var(--red)}
 .log-line .msg-info{color:var(--blue)}
 .log-line .msg-warn{color:var(--yellow)}
+.log-cursor{display:inline-block;width:6px;height:11px;background:var(--green);animation:cursor .8s steps(1) infinite;vertical-align:middle}
+@keyframes cursor{0%,100%{opacity:1}50%{opacity:0}}
 
 .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:999;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
 .modal.open{display:flex}
@@ -132,9 +134,11 @@ body{font-family:var(--font-mono);background:var(--bg);color:var(--text);min-hei
 .fgroup input:focus,.fgroup select:focus,.fgroup textarea:focus{border-color:var(--green2)}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 
-/* cmd-row: só 2 colunas reais */
-.cmd-row{display:grid;grid-template-columns:1fr 36px;gap:6px;align-items:center;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:7px 10px;margin-bottom:5px}
+.cmd-list{max-height:300px;overflow-y:auto;margin:10px 0}
+.cmd-row{display:grid;grid-template-columns:30px 1fr 60px 60px 40px;gap:6px;align-items:center;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:7px 10px;margin-bottom:5px;font-size:11px}
 .cmd-row input[type=text]{background:transparent;border:none;color:var(--text);font-family:var(--font-mono);font-size:11px;outline:none;width:100%}
+.cmd-row input[type=number]{background:var(--bg4);border:1px solid var(--border);border-radius:2px;color:var(--text);font-family:var(--font-mono);font-size:10px;padding:3px 5px;text-align:center;outline:none;width:100%}
+.cmd-row input[type=checkbox]{accent-color:var(--green);cursor:pointer;width:14px;height:14px}
 
 .page{display:none}
 .page.active{display:block}
@@ -160,12 +164,14 @@ body{font-family:var(--font-mono);background:var(--bg);color:var(--text);min-hei
     <div class="sidebar-logo">
       <div class="logo-mark">BC/</div>
       <div class="logo-sub">BotCraft</div>
-      <div class="logo-ver">v3.0</div>
+      <div class="logo-ver">v3.0 — COMPLETE</div>
     </div>
     <nav class="nav" id="mainNav">
       <div class="nav-section">Sistema</div>
       <button class="nav-item active" data-page="dashboard"><i class="fas fa-th"></i><span>Dashboard</span></button>
       <button class="nav-item" data-page="commands"><i class="fas fa-terminal"></i><span>Comandos</span></button>
+      <div class="nav-section">Gerenciar</div>
+      <button class="nav-item" data-page="config"><i class="fas fa-sliders-h"></i><span>Config</span></button>
     </nav>
     <div class="sidebar-footer">
       <div class="server-status">
@@ -232,6 +238,22 @@ body{font-family:var(--font-mono);background:var(--bg);color:var(--text);min-hei
         <div class="section-hdr"><h3>// GERENCIAR COMANDOS</h3><div class="section-hdr-line"></div></div>
         <div class="bots-grid" id="cmdBotsGrid"></div>
       </div>
+
+      <!-- CONFIG PAGE -->
+      <div class="page" id="pg-config">
+        <div class="section-hdr"><h3>// CONFIGURAÇÕES GLOBAIS</h3><div class="section-hdr-line"></div></div>
+        <div class="config-section" style="background:var(--bg2);border:1px solid var(--border);border-radius:4px;overflow:hidden;margin-bottom:12px">
+          <div style="background:var(--bg3);border-bottom:1px solid var(--border);padding:10px 14px;font-size:10px;text-transform:uppercase;letter-spacing:2px;color:var(--green)">Comportamento</div>
+          <div style="padding:14px">
+            <div class="form-row">
+              <div class="fgroup"><label>Delay entre comandos (min seg)</label><input type="number" id="cfgDelayMin" value="3" min="1" max="30"></div>
+              <div class="fgroup"><label>Delay entre comandos (max seg)</label><input type="number" id="cfgDelayMax" value="8" min="2" max="60"></div>
+            </div>
+            <div class="fgroup"><label>Max tentativas de reconexão</label><input type="number" id="cfgMaxReconn" value="10" min="1" max="20"></div>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="saveConfig()"><i class="fas fa-save"></i> Salvar Configurações</button>
+      </div>
     </div>
   </div>
 </div>
@@ -274,7 +296,7 @@ body{font-family:var(--font-mono);background:var(--bg);color:var(--text);min-hei
           </select>
         </div>
       </div>
-      <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="handleCreateBot()"><i class="fas fa-plus"></i> Criar Bot</button>
+      <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="createBot()"><i class="fas fa-plus"></i> Criar Bot</button>
     </div>
   </div>
 </div>
@@ -287,27 +309,34 @@ body{font-family:var(--font-mono);background:var(--bg);color:var(--text);min-hei
       <button class="modal-close" onclick="closeModal('commandsModal')"><i class="fas fa-times"></i></button>
     </div>
     <div class="modal-body">
-      <!-- Envio manual rápido -->
       <div style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:12px;margin-bottom:14px">
-        <div style="font-size:9px;color:var(--green);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-bolt"></i> Envio Manual</div>
+        <div style="font-size:9px;color:var(--green);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-bolt"></i> Comandos Rápidos</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
+          <button class="btn btn-sm quick-cmd" data-cmd="/tpa ">/tpa</button>
+          <button class="btn btn-sm quick-cmd" data-cmd="/tpaccept">/tpaccept</button>
+          <button class="btn btn-sm quick-cmd" data-cmd="/tpdeny">/tpdeny</button>
+          <button class="btn btn-sm quick-cmd" data-cmd="/sethome">/sethome</button>
+          <button class="btn btn-sm quick-cmd" data-cmd="/home">/home</button>
+          <button class="btn btn-sm quick-cmd" data-cmd="/bal">/bal</button>
+          <button class="btn btn-sm quick-cmd" data-cmd="/msg ">/msg</button>
+          <button class="btn btn-sm quick-cmd" data-cmd="Oi pessoal!">Oi pessoal!</button>
+        </div>
         <div style="display:flex;gap:8px">
-          <input type="text" id="manualCmdInput" placeholder="Digite um comando ou mensagem..." style="flex:1;background:var(--bg4);border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:var(--font-mono);font-size:11px;padding:7px 10px;outline:none">
-          <button class="btn btn-primary btn-sm" onclick="sendManualCommand()"><i class="fas fa-paper-plane"></i> Enviar</button>
+          <input type="text" id="quickCmdTarget" placeholder="Nome do jogador (se necessário)" style="flex:1;background:var(--bg4);border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:var(--font-mono);font-size:11px;padding:7px 10px">
+          <button class="btn btn-primary btn-sm" onclick="sendQuickCommand()">Enviar</button>
         </div>
       </div>
 
-      <!-- Lista de comandos automáticos -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div style="font-size:10px;text-transform:uppercase;letter-spacing:2px;color:var(--text3)"><i class="fas fa-list"></i> Comandos Automáticos</div>
-        <div style="display:flex;gap:6px">
+        <div>
           <button class="btn btn-sm" onclick="addCmd()"><i class="fas fa-plus"></i> Adicionar</button>
-          <button class="btn btn-sm btn-danger" onclick="clearAllCmds()"><i class="fas fa-trash"></i> Limpar</button>
+          <button class="btn btn-sm" onclick="clearAllCmds()"><i class="fas fa-trash"></i> Limpar</button>
         </div>
       </div>
-      <div id="cmdList" style="max-height:260px;overflow-y:auto;margin-bottom:12px"></div>
-
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-primary" style="flex:1" onclick="saveCmds()"><i class="fas fa-save"></i> Salvar</button>
+      <div class="cmd-list" id="cmdList"></div>
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button class="btn btn-primary" style="flex:1" onclick="saveCmds()"><i class="fas fa-save"></i> Salvar Comandos</button>
         <button class="btn" style="flex:1" onclick="testCommands()"><i class="fas fa-play"></i> Testar Agora</button>
       </div>
 
@@ -327,38 +356,35 @@ body{font-family:var(--font-mono);background:var(--bg);color:var(--text);min-hei
 <script>
 const API = '/api';
 let socket = null;
-try { socket = io(); } catch(e) { console.log('Socket.IO indisponível'); }
+try { socket = io(); } catch(e) { console.log('Socket.IO not available'); }
 
 let currentBotId = null;
 let currentCmds = [];
 
-// ── CLOCK ──────────────────────────────────────────────────────
-setInterval(() => {
+// CLOCK
+function updateClock() {
   document.getElementById('clockEl').textContent = new Date().toLocaleTimeString('pt-BR');
-}, 1000);
+}
+setInterval(updateClock, 1000);
+updateClock();
 
-// ── MODAL ──────────────────────────────────────────────────────
+// MODAL
 function openModal(id) { document.getElementById(id).classList.add('open'); }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
-window.addEventListener('click', e => {
-  if (e.target.classList.contains('modal')) e.target.classList.remove('open');
-});
+window.addEventListener('click', e => { if (e.target.classList.contains('modal')) e.target.classList.remove('open'); });
 
-// ── UTIL ───────────────────────────────────────────────────────
-function esc(s) {
-  return String(s || '').replace(/[&<>"']/g, m =>
-    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-}
+// ESCAPE HTML
+function esc(s) { return String(s || '').replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[m])); }
+
 function statusClass(s) {
-  return {online:'s-online',offline:'s-offline',connecting:'s-connecting',kicked:'s-kicked'}[s] || 's-offline';
+  return {online:'s-online', offline:'s-offline', connecting:'s-connecting', kicked:'s-kicked'}[s] || 's-offline';
 }
 function statusText(s) {
-  return {online:'ONLINE',offline:'OFFLINE',connecting:'CONNECTING',kicked:'KICKED'}[s] || String(s).toUpperCase();
+  return {online:'ONLINE', offline:'OFFLINE', connecting:'CONNECTING', kicked:'KICKED'}[s] || s.toUpperCase();
 }
 
-// ── BOT CARD ───────────────────────────────────────────────────
 function botCard(b) {
-  return `<div class="bot-card ${b.status === 'online' ? 'online' : ''}" data-bot-id="${b.id}">
+  return `<div class="bot-card ${b.status === 'online' ? 'online' : ''}">
     <div class="bot-hdr">
       <div class="bot-hdr-name"><i class="fas fa-robot" style="font-size:10px;margin-right:4px;color:var(--text3)"></i>${esc(b.nome)}</div>
       <span class="status-pill ${statusClass(b.status)}">${statusText(b.status)}</span>
@@ -366,62 +392,47 @@ function botCard(b) {
     <div class="bot-body">
       <div class="bot-stats-grid">
         <div class="bot-stat-item"><i class="fas fa-server"></i><span>${esc(b.server)}:${b.port || 25565}</span></div>
-        <div class="bot-stat-item"><i class="fas fa-code-branch"></i><span>${esc(b.version || '1.21.4')}</span></div>
+        <div class="bot-stat-item"><i class="fas fa-code-branch"></i><span>${b.version || '1.20.4'}</span></div>
         <div class="bot-stat-item"><i class="fas fa-sync-alt"></i><span>Auto: ${b.autoSequence ? 'ON' : 'OFF'}</span></div>
         <div class="bot-stat-item"><i class="fas fa-terminal"></i><span>${b.commandsCount || 0} comandos</span></div>
       </div>
       <div class="bot-footer">
-        <button class="bot-btn bot-btn-start" data-action="start" data-id="${b.id}"><i class="fas fa-play"></i> Start</button>
-        <button class="bot-btn bot-btn-stop" data-action="stop" data-id="${b.id}"><i class="fas fa-stop"></i> Stop</button>
-        <button class="bot-btn" data-action="toggle" data-id="${b.id}"><i class="fas fa-sync-alt"></i> Auto</button>
-        <button class="bot-btn bot-btn-cfg" data-action="cmds" data-id="${b.id}" data-nome="${esc(b.nome)}"><i class="fas fa-terminal"></i> Comandos</button>
+        <button class="bot-btn bot-btn-start" onclick="startBot('${b.id}')"><i class="fas fa-play"></i> Start</button>
+        <button class="bot-btn bot-btn-stop" onclick="stopBot('${b.id}')"><i class="fas fa-stop"></i> Stop</button>
+        <button class="bot-btn" onclick="toggleAuto('${b.id}')"><i class="fas fa-sync-alt"></i> Auto</button>
+        <button class="bot-btn bot-btn-cfg" onclick="openCmdsModal('${b.id}','${esc(b.nome)}')"><i class="fas fa-terminal"></i> Comandos</button>
       </div>
     </div>
   </div>`;
 }
 
-// Event delegation para os cards — evita onclick inline com dados do usuário
-document.addEventListener('click', e => {
-  const btn = e.target.closest('[data-action]');
-  if (!btn) return;
-  const { action, id, nome } = btn.dataset;
-  if (action === 'start')  startBot(id);
-  if (action === 'stop')   stopBot(id);
-  if (action === 'toggle') toggleAuto(id);
-  if (action === 'cmds')   openCmdsModal(id, nome);
-});
-
-// ── LOAD & RENDER ──────────────────────────────────────────────
 async function loadBots() {
   try {
-    const [botsRes, statsRes] = await Promise.all([
-      fetch(`${API}/bots`),
-      fetch(`${API}/bots/stats`)
-    ]);
-    if (!botsRes.ok) throw new Error('API não disponível');
-    const bots  = await botsRes.json();
-    const stats = await statsRes.json().catch(() => ({}));
+    const r = await fetch(`${API}/bots`);
+    if (!r.ok) throw new Error('API not ready');
+    const bots = await r.json();
     renderBots(bots);
-    updateStats(bots);
+    const stats = await fetch(`${API}/bots/stats`).then(r => r.json()).catch(() => ({}));
+    updateStats(bots, stats);
+    addLog('Bots carregados da API', 'ok');
   } catch(e) {
     addLog('Erro ao carregar bots da API', 'err');
-    document.getElementById('botsGrid').innerHTML =
-      '<div class="empty-state"><div class="ei"><i class="fas fa-plug"></i></div><p>API não disponível<br>Certifique-se que o servidor está rodando</p></div>';
+    document.getElementById('botsGrid').innerHTML = '<div class="empty-state"><div class="ei"><i class="fas fa-plug"></i></div><p>API não disponível<br>Certifique-se que o servidor está rodando</p></div>';
   }
 }
 
 function renderBots(bots) {
-  const grid    = document.getElementById('botsGrid');
+  const grid = document.getElementById('botsGrid');
   const cmdGrid = document.getElementById('cmdBotsGrid');
-
+  
   if (!bots.length) {
     const empty = '<div class="empty-state"><div class="ei"><i class="fas fa-robot"></i></div><p>Nenhum bot criado.<br>Clique em "Novo Bot" para começar.</p></div>';
     grid.innerHTML = empty;
     cmdGrid.innerHTML = empty;
     return;
   }
-
-  grid.innerHTML    = bots.map(b => botCard(b)).join('');
+  
+  grid.innerHTML = bots.map(b => botCard(b)).join('');
   cmdGrid.innerHTML = bots.map(b => `
     <div class="bot-card">
       <div class="bot-hdr">
@@ -434,25 +445,22 @@ function renderBots(bots) {
           <div class="bot-stat-item"><i class="fas fa-terminal"></i><span>${b.commandsCount || 0} cmds</span></div>
         </div>
         <div class="bot-footer">
-          <button class="bot-btn bot-btn-cfg" data-action="cmds" data-id="${b.id}" data-nome="${esc(b.nome)}">
-            <i class="fas fa-edit"></i> Editar Comandos
-          </button>
+          <button class="bot-btn bot-btn-cfg" onclick="openCmdsModal('${b.id}','${esc(b.nome)}')"><i class="fas fa-edit"></i> Editar Comandos</button>
         </div>
       </div>
     </div>
   `).join('');
 }
 
-function updateStats(bots) {
-  document.getElementById('st-total').textContent      = bots.length;
-  document.getElementById('st-online').textContent     = bots.filter(b => b.status === 'online').length;
-  document.getElementById('st-offline').textContent    = bots.filter(b => b.status === 'offline').length;
+function updateStats(bots, stats) {
+  document.getElementById('st-total').textContent = bots.length;
+  document.getElementById('st-online').textContent = bots.filter(b => b.status === 'online').length;
+  document.getElementById('st-offline').textContent = bots.filter(b => b.status === 'offline').length;
   document.getElementById('st-connecting').textContent = bots.filter(b => b.status === 'connecting').length;
-  document.getElementById('st-kicked').textContent     = bots.filter(b => b.status === 'kicked').length;
-  document.getElementById('st-running').textContent    = bots.filter(b => b.running).length;
+  document.getElementById('st-kicked').textContent = bots.filter(b => b.status === 'kicked').length;
+  document.getElementById('st-running').textContent = bots.filter(b => b.running).length;
 }
 
-// ── BOT ACTIONS ────────────────────────────────────────────────
 async function startBot(id) {
   try {
     await fetch(`${API}/bot/${id}/start`, { method: 'POST' });
@@ -472,13 +480,12 @@ async function stopBot(id) {
 async function toggleAuto(id) {
   try {
     await fetch(`${API}/bot/${id}/toggleAuto`, { method: 'POST' });
-    addLog(`Auto sequence alternado para bot ${id}`, 'info');
+    addLog(`Toggled auto sequence for bot ${id}`, 'info');
     loadBots();
   } catch(e) { addLog(`Erro ao alternar auto: ${e.message}`, 'err'); }
 }
 
 async function startAll() {
-  if (!confirm('Iniciar TODOS os bots offline?')) return;
   try {
     await fetch(`${API}/bots/startAll`, { method: 'POST' });
     addLog('Iniciando todos os bots...', 'info');
@@ -495,21 +502,21 @@ async function stopAll() {
   } catch(e) { addLog(`Erro ao parar todos: ${e.message}`, 'err'); }
 }
 
-async function handleCreateBot() {
+async function createBot() {
   const body = {
-    nome:         document.getElementById('nb-nome').value.trim(),
-    server:       document.getElementById('nb-server').value.trim(),
-    port:         parseInt(document.getElementById('nb-port').value) || 25565,
-    senha:        document.getElementById('nb-senha').value,
-    version:      document.getElementById('nb-version').value,
+    nome: document.getElementById('nb-nome').value,
+    server: document.getElementById('nb-server').value,
+    port: parseInt(document.getElementById('nb-port').value) || 25565,
+    senha: document.getElementById('nb-senha').value,
+    version: document.getElementById('nb-version').value,
     autoSequence: document.getElementById('nb-auto').value === 'true'
   };
-
+  
   if (!body.nome || !body.server) {
     alert('Nome e servidor são obrigatórios');
     return;
   }
-
+  
   try {
     const r = await fetch(`${API}/bot/create`, {
       method: 'POST',
@@ -521,22 +528,21 @@ async function handleCreateBot() {
       closeModal('newBotModal');
       loadBots();
       addLog(`Bot "${body.nome}" criado com sucesso!`, 'ok');
-      document.getElementById('nb-nome').value   = '';
+      document.getElementById('nb-nome').value = '';
       document.getElementById('nb-server').value = '';
-      document.getElementById('nb-senha').value  = '';
+      document.getElementById('nb-senha').value = '';
     }
   } catch(e) {
     addLog(`Erro ao criar bot: ${e.message}`, 'err');
   }
 }
 
-// ── COMMANDS MODAL ─────────────────────────────────────────────
 async function openCmdsModal(botId, botName) {
   currentBotId = botId;
-  currentCmds  = [];
+  currentCmds = [];
+  
   document.getElementById('cmdModalName').textContent = botName;
-  document.getElementById('manualCmdInput').value = '';
-
+  
   try {
     const r = await fetch(`${API}/bot/${botId}`);
     if (r.ok) {
@@ -546,7 +552,7 @@ async function openCmdsModal(botId, botName) {
   } catch(e) {
     addCmdLog('Erro ao carregar comandos', 'err');
   }
-
+  
   renderCmdList();
   openModal('commandsModal');
 }
@@ -557,10 +563,11 @@ function renderCmdList() {
     container.innerHTML = '<div style="text-align:center;padding:20px;font-size:11px;color:var(--text3)">Nenhum comando. Clique em "Adicionar" para começar.</div>';
     return;
   }
+  
   container.innerHTML = currentCmds.map((cmd, i) => `
     <div class="cmd-row">
-      <input type="text" value="${esc(cmd)}" onchange="currentCmds[${i}] = this.value" placeholder="/comando">
-      <button class="bot-btn bot-btn-stop" style="padding:3px 8px;justify-content:center" onclick="removeCmd(${i})"><i class="fas fa-trash"></i></button>
+      <input type="text" value="${esc(cmd)}" onchange="currentCmds[${i}] = this.value">
+      <button class="bot-btn bot-btn-stop" style="padding:3px 8px" onclick="removeCmd(${i})"><i class="fas fa-trash"></i></button>
     </div>
   `).join('');
 }
@@ -568,9 +575,6 @@ function renderCmdList() {
 function addCmd() {
   currentCmds.push('');
   renderCmdList();
-  // foca no último input adicionado
-  const inputs = document.querySelectorAll('#cmdList .cmd-row input[type=text]');
-  if (inputs.length) inputs[inputs.length - 1].focus();
 }
 
 function removeCmd(index) {
@@ -586,14 +590,13 @@ function clearAllCmds() {
 }
 
 async function saveCmds() {
-  const clean = currentCmds.filter(c => c.trim());
   try {
     await fetch(`${API}/bot/${currentBotId}/commands`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ commands: clean })
+      body: JSON.stringify({ commands: currentCmds.filter(c => c.trim()) })
     });
-    addCmdLog(`${clean.length} comando(s) salvos!`, 'ok');
+    addCmdLog('Comandos salvos com sucesso!', 'ok');
     closeModal('commandsModal');
     loadBots();
   } catch(e) {
@@ -602,54 +605,97 @@ async function saveCmds() {
 }
 
 async function testCommands() {
-  const clean = currentCmds.filter(c => c.trim());
-  if (!clean.length) { addCmdLog('Nenhum comando para testar', 'warn'); return; }
-  addCmdLog('Executando teste...', 'info');
-  for (const cmd of clean) {
-    addCmdLog(`→ ${cmd}`, 'info');
-    try {
-      await fetch(`${API}/bot/${currentBotId}/say`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: cmd })
-      });
-    } catch(e) {
-      addCmdLog(`Erro: ${e.message}`, 'err');
+  addCmdLog('Testando comandos...', 'info');
+  for (const cmd of currentCmds) {
+    if (cmd && cmd.trim()) {
+      addCmdLog(`Enviando: ${cmd}`, 'info');
+      try {
+        await fetch(`${API}/bot/${currentBotId}/say`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: cmd })
+        });
+        await new Promise(r => setTimeout(r, 2000));
+      } catch(e) {
+        addCmdLog(`Erro: ${e.message}`, 'err');
+      }
     }
-    await new Promise(r => setTimeout(r, 2000));
   }
   addCmdLog('Teste concluído!', 'ok');
 }
 
-function sendManualCommand() {
-  const input = document.getElementById('manualCmdInput');
-  const cmd = input.value.trim();
-  if (!cmd) { addCmdLog('Digite um comando primeiro', 'warn'); return; }
+function sendQuickCommand() {
+  const target = document.getElementById('quickCmdTarget').value;
+  let cmd = currentQuickCmd || '';
+  
+  if (target && !cmd.includes('/msg') && !cmd.includes('/tpa') && !cmd.includes('/pay')) {
+    cmd = cmd + ' ' + target;
+  }
+  
+  if (cmd.includes('/msg') && target) {
+    const msg = prompt('Digite a mensagem:');
+    if (msg) cmd = `/msg ${target} ${msg}`;
+  }
+  
+  if (!cmd) {
+    addCmdLog('Selecione um comando rápido primeiro!', 'warn');
+    return;
+  }
+  
   addCmdLog(`Enviando: ${cmd}`, 'info');
   fetch(`${API}/bot/${currentBotId}/say`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message: cmd })
-  })
-    .then(r => r.json())
-    .then(d => {
-      if (d.success) addCmdLog(`✔ Enviado`, 'ok');
-      else addCmdLog(`Erro: ${d.error}`, 'err');
-    })
-    .catch(e => addCmdLog(`Erro: ${e.message}`, 'err'));
-  input.value = '';
+  }).catch(e => addCmdLog(`Erro: ${e.message}`, 'err'));
 }
 
-// Enter no input manual também envia
-document.getElementById('manualCmdInput')?.addEventListener('keydown', e => {
-  if (e.key === 'Enter') sendManualCommand();
+let currentQuickCmd = '';
+document.querySelectorAll('.quick-cmd').forEach(btn => {
+  btn.onclick = () => {
+    currentQuickCmd = btn.dataset.cmd;
+    document.querySelectorAll('.quick-cmd').forEach(b => b.style.borderColor = '');
+    btn.style.borderColor = 'var(--green)';
+    addCmdLog(`Comando selecionado: ${currentQuickCmd}`, 'info');
+  };
 });
 
-// ── LOG ────────────────────────────────────────────────────────
+async function loadConfig() {
+  try {
+    const r = await fetch(`${API}/config`);
+    if (r.ok) {
+      const c = await r.json();
+      document.getElementById('cfgDelayMin').value = c.humanDelayMin || 3;
+      document.getElementById('cfgDelayMax').value = c.humanDelayMax || 8;
+      document.getElementById('cfgMaxReconn').value = c.maxReconnectAttempts || 10;
+    }
+  } catch(e) {}
+}
+
+async function saveConfig() {
+  const cfg = {
+    humanDelayMin: parseInt(document.getElementById('cfgDelayMin').value) || 3,
+    humanDelayMax: parseInt(document.getElementById('cfgDelayMax').value) || 8,
+    maxReconnectAttempts: parseInt(document.getElementById('cfgMaxReconn').value) || 10
+  };
+  
+  try {
+    await fetch(`${API}/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cfg)
+    });
+    alert('Configurações salvas!');
+    addLog('Configurações globais atualizadas', 'ok');
+  } catch(e) {
+    alert('Erro ao salvar configurações');
+  }
+}
+
 function addLog(msg, type = 'info') {
-  const el  = document.getElementById('termLog');
-  const ts  = new Date().toLocaleTimeString('pt-BR');
-  const cls = { ok:'msg-ok', err:'msg-err', warn:'msg-warn', info:'msg-info' }[type] || 'msg-info';
+  const el = document.getElementById('termLog');
+  const ts = new Date().toLocaleTimeString('pt-BR');
+  const cls = { ok: 'msg-ok', err: 'msg-err', warn: 'msg-warn', info: 'msg-info' }[type] || 'msg-info';
   const div = document.createElement('div');
   div.className = 'log-line';
   div.innerHTML = `<span class="ts">[${ts}]</span> <span class="${cls}">${esc(msg)}</span>`;
@@ -659,9 +705,9 @@ function addLog(msg, type = 'info') {
 }
 
 function addCmdLog(msg, type = 'info') {
-  const el  = document.getElementById('cmdLog');
-  const ts  = new Date().toLocaleTimeString('pt-BR');
-  const cls = { ok:'msg-ok', err:'msg-err', warn:'msg-warn', info:'msg-info' }[type] || 'msg-info';
+  const el = document.getElementById('cmdLog');
+  const ts = new Date().toLocaleTimeString('pt-BR');
+  const cls = { ok: 'msg-ok', err: 'msg-err', warn: 'msg-warn', info: 'msg-info' }[type] || 'msg-info';
   const div = document.createElement('div');
   div.className = 'log-line';
   div.innerHTML = `<span class="ts">[${ts}]</span> <span class="${cls}">${esc(msg)}</span>`;
@@ -670,38 +716,38 @@ function addCmdLog(msg, type = 'info') {
   if (el.children.length > 50) el.removeChild(el.children[0]);
 }
 
-// ── NAVEGAÇÃO ──────────────────────────────────────────────────
-const pageTitles = {
-  dashboard: ['Dashboard',  'Visão geral dos bots'],
-  commands:  ['Comandos',   'Configurar sequências de comandos']
-};
-
+// NAVIGATION
 document.querySelectorAll('.nav-item').forEach(item => {
-  item.addEventListener('click', () => {
+  item.onclick = () => {
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     item.classList.add('active');
     const pg = item.dataset.page;
     document.getElementById(`pg-${pg}`).classList.add('active');
-    const [title, sub] = pageTitles[pg] || [pg, ''];
-    document.getElementById('pgTitle').textContent = title;
-    document.getElementById('pgSub').textContent   = sub;
+    const titles = {
+      dashboard: ['Dashboard', 'Visão geral dos bots'],
+      commands: ['Comandos', 'Configurar sequências de comandos'],
+      config: ['Configurações', 'Comportamento global dos bots']
+    };
+    document.getElementById('pgTitle').textContent = titles[pg][0];
+    document.getElementById('pgSub').textContent = titles[pg][1];
     if (pg === 'commands') loadBots();
-  });
+    if (pg === 'config') loadConfig();
+  };
 });
 
-// ── SOCKET.IO ──────────────────────────────────────────────────
+// SOCKET.IO EVENTS
 if (socket) {
-  socket.on('botStatus', data => {
-    addLog(`Bot ${data.nome} → ${data.status}`, 'info');
+  socket.on('botStatus', (data) => {
+    addLog(`Bot ${data.nome} mudou para ${data.status}`, 'info');
     loadBots();
   });
 }
 
-// ── INIT ───────────────────────────────────────────────────────
+// INIT
 loadBots();
-// Polling leve como fallback — Socket.IO já cuida das atualizações em tempo real
-setInterval(loadBots, 30000);
+loadConfig();
+setInterval(loadBots, 10000);
 </script>
 </body>
 </html>
