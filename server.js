@@ -375,19 +375,15 @@ function createBot(botId) {
     });
     
     bot.on('kicked', (reason) => {
-        let kickReason = '';
-        if (typeof reason === 'string') kickReason = reason;
-        else if (reason?.text) kickReason = reason.text;
-        else kickReason = JSON.stringify(reason);
-        
-        console.log(`[${botData.nome}] 🚫 Kickado: ${kickReason.substring(0, 100)}`);
-        
-        botData.status = 'kicked';
-        botData.resourcePackReady = false;
-        bots[index] = botData;
-        io.emit('botStatus', { id: botId, status: 'kicked', nome: botData.nome });
-        
-        scheduleReconnect(botId);
+        try {
+            const parsed = typeof reason === 'string' ? JSON.parse(reason) : reason;
+            const extra = parsed?.value?.extra?.value?.value;
+            const text = extra?.map(e => e?.text?.value || '').join('') || JSON.stringify(reason);
+            console.log(`[${botData.nome}] 🚫 KICK: ${text}`);
+        } catch(e) {
+            console.log(`[${botData.nome}] 🚫 KICK RAW:`, JSON.stringify(reason));
+        }
+        // ...resto normal
     });
 }
 
